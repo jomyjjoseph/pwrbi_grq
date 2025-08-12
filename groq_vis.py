@@ -51,7 +51,9 @@ if uploaded_file is not None:
             - Handle NaN values safely to avoid errors.
             - When applying string operations, convert to string first (e.g., astype(str)) but only for the specific column you modify.
             - Do not change number, percentage, or time formats unless explicitly instructed.
-            - Do not overwrite columns with invalid data types.
+            - When parsing dates, always use:
+              pd.to_datetime(df['col'].astype(str).str.strip(), errors='coerce')
+              (Do NOT hardcode a format unless explicitly given by the user)
             - Avoid hardcoding sample values; generalize the solution.
             - Return ONLY Python code that modifies `df` in place. No explanations.
             - Do not include unnecessary indentation at the start of code lines unless required by Python syntax.
@@ -83,6 +85,13 @@ if uploaded_file is not None:
 
             # Normalize indentation
             clean_code = textwrap.dedent("\n".join(python_lines)).strip()
+
+            # --- Auto-fix risky date parsing ---
+            clean_code = re.sub(
+                r"pd\.to_datetime\(([^,]+),\s*format=.*?\)",
+                r"pd.to_datetime(\1.astype(str).str.strip(), errors='coerce')",
+                clean_code
+            )
 
             # Show generated code for review
             st.write("### Generated Code")
