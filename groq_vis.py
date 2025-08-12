@@ -49,7 +49,9 @@ if uploaded_file is not None:
             SAFETY RULES:
             - Always check if a column exists before modifying or dropping it.
             - Handle NaN values safely to avoid errors.
-            - When applying string operations, convert to string first (e.g., astype(str)) but only for the specific column you modify.
+            - When applying string operations, always convert to string first:
+              df['col'] = df['col'].astype(str).apply(lambda x: <string logic> if pd.notna(x) else x)
+            - Never call string methods like .upper() or .split() directly on the Series without .str or .apply.
             - Do not change number, percentage, or time formats unless explicitly instructed.
             - When parsing dates, always use:
               pd.to_datetime(df['col'].astype(str).str.strip(), errors='coerce')
@@ -90,6 +92,27 @@ if uploaded_file is not None:
             clean_code = re.sub(
                 r"pd\.to_datetime\(([^,]+),\s*format=.*?\)",
                 r"pd.to_datetime(\1.astype(str).str.strip(), errors='coerce')",
+                clean_code
+            )
+
+            # --- Auto-fix unsafe .upper() calls ---
+            clean_code = re.sub(
+                r"df\['(\w+)'\]\.upper\(\)",
+                r"df['\1'].astype(str).str.upper()",
+                clean_code
+            )
+
+            # --- Auto-fix unsafe .split(',')[0] calls ---
+            clean_code = re.sub(
+                r"df\['(\w+)'\]\.split\('([^']+)'\)\[0\]",
+                r"df['\1'].astype(str).apply(lambda x: x.split('\2')[0] if pd.notna(x) else x)",
+                clean_code
+            )
+
+            # --- Auto-fix unsafe .str.split(',')[0] calls ---
+            clean_code = re.sub(
+                r"df\['(\w+)'\]\.str\.split\('([^']+)'\)\[0\]",
+                r"df['\1'].astype(str).apply(lambda x: x.split('\2')[0] if pd.notna(x) else x)",
                 clean_code
             )
 
