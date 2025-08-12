@@ -109,14 +109,33 @@ if uploaded_file is not None:
             # --- Auto-fix unsafe .split(',')[0] calls ---
             clean_code = re.sub(
                 r"df\['(\w+)'\]\.split\('([^']+)'\)\[0\]",
-                r"df['\1'].astype(str).apply(lambda x: x.split('\2')[0] if pd.notna(x) else x)",
+                r"df['\1'].astype(str).apply(lambda x: x.split('\2')[0] if pd.notna(x) and len(x.split('\2'))>0 else x)",
                 clean_code
             )
 
             # --- Auto-fix unsafe .str.split(',')[0] calls ---
             clean_code = re.sub(
                 r"df\['(\w+)'\]\.str\.split\('([^']+)'\)\[0\]",
-                r"df['\1'].astype(str).apply(lambda x: x.split('\2')[0] if pd.notna(x) else x)",
+                r"df['\1'].astype(str).apply(lambda x: x.split('\2')[0] if pd.notna(x) and len(x.split('\2'))>0 else x)",
+                clean_code
+            )
+
+            # --- Auto-fix ANY .split(...)[n] calls ---
+            def safe_split(match):
+                col = match.group(1)
+                sep = match.group(2)
+                idx = int(match.group(3))
+                return f"df['{col}'].astype(str).apply(lambda x: x.split('{sep}')[{idx}] if pd.notna(x) and len(x.split('{sep}'))>{idx} else x)"
+
+            clean_code = re.sub(
+                r"df\['(\w+)'\]\.split\('([^']+)'\)\[(\d+)\]",
+                safe_split,
+                clean_code
+            )
+
+            clean_code = re.sub(
+                r"df\['(\w+)'\]\.str\.split\('([^']+)'\)\[(\d+)\]",
+                safe_split,
                 clean_code
             )
 
