@@ -79,11 +79,8 @@ if uploaded_file is not None:
             # --- Sanitize AI output ---
             raw_code = raw_code.replace("```python", "").replace("```", "").strip()
 
-            # Keep only valid Python lines
-            python_lines = []
-            for line in raw_code.splitlines():
-                if re.match(r'^\s*(df|pd|import|from)\b', line):
-                    python_lines.append(line)
+            # Keep all non-empty, non-comment lines
+            python_lines = [line for line in raw_code.splitlines() if line.strip() and not line.strip().startswith("#")]
 
             # Normalize indentation
             clean_code = textwrap.dedent("\n".join(python_lines)).strip()
