@@ -1,5 +1,6 @@
 import os
 import re
+import textwrap
 import pandas as pd
 import streamlit as st
 from groq import Groq
@@ -53,6 +54,7 @@ if uploaded_file is not None:
             - Do not overwrite columns with invalid data types.
             - Avoid hardcoding sample values; generalize the solution.
             - Return ONLY Python code that modifies `df` in place. No explanations.
+            - Do not include unnecessary indentation at the start of code lines unless required by Python syntax.
 
             Here is the first 10 rows of data:
             {df.head(10).to_csv(index=False)}
@@ -79,7 +81,8 @@ if uploaded_file is not None:
                 if re.match(r'^\s*(df|pd|import|from)\b', line):
                     python_lines.append(line)
 
-            clean_code = "\n".join(python_lines).strip()
+            # Normalize indentation
+            clean_code = textwrap.dedent("\n".join(python_lines)).strip()
 
             # Show generated code for review
             st.write("### Generated Code")
@@ -87,7 +90,6 @@ if uploaded_file is not None:
 
             # --- Pre-execution safeguard for AI code ---
             try:
-                # Provide df and pd to the exec environment
                 exec(clean_code, {"df": df, "pd": pd, "pd_notna": pd.notna})
             except Exception as e:
                 st.error(f"Error executing AI code: {e}")
