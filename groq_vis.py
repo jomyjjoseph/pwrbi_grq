@@ -40,15 +40,25 @@ if uploaded_file is not None:
 
     if st.button("Apply Changes") and user_prompt:
         try:
+            # --- Inject safety instructions into the prompt ---
             prompt_text = f"""
-            You are a data cleaning assistant.
-            I have the following data (first 10 rows shown below):
+            You are a safe and reliable data cleaning assistant.
+            Work ONLY with pandas code that modifies `df` in place.
+
+            SAFETY RULES:
+            - Always check if a column exists before modifying or dropping it.
+            - Handle NaN values safely to avoid errors.
+            - When applying string operations, convert to string first (e.g., astype(str)) but only for the specific column you modify.
+            - Do not change number, percentage, or time formats unless explicitly instructed.
+            - Do not overwrite columns with invalid data types.
+            - Avoid hardcoding sample values; generalize the solution.
+            - Return ONLY Python code that modifies `df` in place. No explanations.
+
+            Here is the first 10 rows of data:
             {df.head(10).to_csv(index=False)}
 
-            Instruction from user:
+            User instruction:
             {user_prompt}
-
-            Only return Python code that modifies `df` in place using pandas.
             """
 
             # Send request to Groq
@@ -63,7 +73,7 @@ if uploaded_file is not None:
             # --- Sanitize AI output ---
             raw_code = raw_code.replace("```python", "").replace("```", "").strip()
 
-            # Keep only valid Python lines (ignore natural language)
+            # Keep only valid Python lines
             python_lines = []
             for line in raw_code.splitlines():
                 if re.match(r'^\s*(df|pd|import|from)\b', line):
@@ -75,11 +85,13 @@ if uploaded_file is not None:
             st.write("### Generated Code")
             st.code(clean_code, language="python")
 
-            # Execute generated code
+            # --- Pre-execution safeguard for AI code ---
             try:
-                exec(clean_code, {"df": df, "pd": pd})
+                # Provide df and pd to the exec environment
+                exec(clean_code, {"df": df, "pd": pd, "pd_notna": pd.notna})
             except Exception as e:
                 st.error(f"Error executing AI code: {e}")
+                st.code(clean_code, language="python")
                 st.stop()
 
             # Show cleaned data
