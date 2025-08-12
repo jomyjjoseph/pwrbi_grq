@@ -1,14 +1,13 @@
 import os
+import re
 import pandas as pd
 import streamlit as st
 from groq import Groq
 
 # --- API Key Handling ---
-# First try from Streamlit Cloud secrets
 if "GROQ_API_KEY" in st.secrets:
     api_key = st.secrets["GROQ_API_KEY"]
 else:
-    # Fallback for local development
     from dotenv import load_dotenv
     load_dotenv()
     api_key = os.getenv("GROQ_API_KEY")
@@ -35,14 +34,12 @@ if uploaded_file is not None:
     st.write("### Original Data")
     st.dataframe(df)
 
-    # Cleaning instructions
     user_prompt = st.text_area(
         "Describe the cleaning changes you want (e.g., 'Remove characters after comma in column Name')"
     )
 
     if st.button("Apply Changes") and user_prompt:
         try:
-            # Prepare AI prompt
             prompt_text = f"""
             You are a data cleaning assistant.
             I have the following data (first 10 rows shown below):
@@ -51,13 +48,12 @@ if uploaded_file is not None:
             Instruction from user:
             {user_prompt}
 
-            Explain in plain English how to modify the DataFrame in pandas code,
-            and only return Python code that modifies `df` in place.
+            Only return Python code that modifies `df` in place using pandas.
             """
 
             # Send request to Groq
             response = client.chat.completions.create(
-                model="llama3-8b-8192",  # Free LLaMA 3 model
+                model="llama3-8b-8192",
                 messages=[{"role": "user", "content": prompt_text}],
                 temperature=0
             )
@@ -65,14 +61,21 @@ if uploaded_file is not None:
             raw_code = response.choices[0].message.content
 
             # --- Sanitize AI output ---
-            clean_code = raw_code.replace("```python", "").replace("```", "").strip()
-            clean_code = "\n".join(line for line in clean_code.splitlines() if line.strip())
+            raw_code = raw_code.replace("```python", "").replace("```", "").strip()
+
+            # Keep only valid Python lines (ignore natural language)
+            python_lines = []
+            for line in raw_code.splitlines():
+                if re.match(r'^\s*(df|pd|import|from)\b', line):
+                    python_lines.append(line)
+
+            clean_code = "\n".join(python_lines).strip()
 
             # Show generated code for review
             st.write("### Generated Code")
             st.code(clean_code, language="python")
 
-            # Execute the generated code safely
+            # Execute generated code
             try:
                 exec(clean_code, {"df": df, "pd": pd})
             except Exception as e:
