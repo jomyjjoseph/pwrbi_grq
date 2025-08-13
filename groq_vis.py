@@ -132,16 +132,42 @@ if uploaded_file is not None:
                 clean_code
             )
 
-            # Show generated code
+            # Show generated code for review
             st.write("### Generated Code")
             st.code(clean_code, language="python")
 
-            # Execute on persistent df
+            # --- Execute with friendly error handling ---
             try:
                 exec(clean_code, {"df": df, "pd": pd, "pd_notna": pd.notna})
                 st.session_state.df = df
+                st.success("Changes applied successfully!")
             except Exception as e:
-                st.error(f"Error executing AI code: {e}")
+                error_message = str(e).lower()
+
+                if "can only use .str accessor" in error_message:
+                    user_friendly = (
+                        "Your instruction is trying to use a text operation "
+                        "on a column that is not plain text. "
+                        "You may need to first convert it to text before making this change."
+                    )
+                elif "keyerror" in error_message:
+                    user_friendly = (
+                        "You mentioned a column name that doesn't exist in the data. "
+                        "Please check the exact name and try again."
+                    )
+                elif "valueerror" in error_message:
+                    user_friendly = (
+                        "Your change doesn't match the data format. "
+                        "Please adjust your instructions."
+                    )
+                else:
+                    user_friendly = (
+                        "Something went wrong while applying your change. "
+                        "Please review your instructions and try again."
+                    )
+
+                st.error(user_friendly)
+                st.info("No changes have been made. Please correct your prompt and try again.")
                 st.code(clean_code, language="python")
                 st.stop()
 
@@ -159,4 +185,4 @@ if uploaded_file is not None:
             )
 
         except Exception as e:
-            st.error(f"Error: {e}")
+            st.error(f"Unexpected problem: {e}")
