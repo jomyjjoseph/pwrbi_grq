@@ -25,14 +25,17 @@ st.title("Excel Data Cleaner with AI Prompts (Groq Version)")
 
 uploaded_file = st.file_uploader("Upload Excel/CSV file", type=["xlsx", "csv"])
 
+# --- Keep DataFrame in session state ---
 if uploaded_file is not None:
-    # Read uploaded file
-    if uploaded_file.name.endswith(".csv"):
-        df = pd.read_csv(uploaded_file)
-    else:
-        df = pd.read_excel(uploaded_file)
+    if "df" not in st.session_state:
+        if uploaded_file.name.endswith(".csv"):
+            st.session_state.df = pd.read_csv(uploaded_file)
+        else:
+            st.session_state.df = pd.read_excel(uploaded_file)
 
-    st.write("### Original Data")
+    df = st.session_state.df
+
+    st.write("### Current Data")
     st.dataframe(df)
 
     user_prompt = st.text_area(
@@ -41,26 +44,27 @@ if uploaded_file is not None:
 
     if st.button("Apply Changes") and user_prompt:
         try:
-            # --- Inject safety instructions into the prompt ---
+            # --- Updated AI prompt ---
             prompt_text = f"""
-            You are a safe and reliable data cleaning assistant.
-            Work ONLY with pandas code that modifies `df` in place.
+            You are a safe and reliable Python data cleaning assistant.
 
-            SAFETY RULES:
+            IMPORTANT:
+            - You are working with an existing pandas DataFrame called `df` that is already loaded in memory.
+            - You MUST modify `df` **in place** — do NOT reassign it with new data from scratch.
+            - Do NOT read files or create new DataFrames unless explicitly told.
+            - Do NOT drop all data or reset the index unless explicitly told.
             - Always check if a column exists before modifying or dropping it.
             - Handle NaN values safely to avoid errors.
-            - When applying string operations, always convert to string first:
-              df['col'] = df['col'].astype(str).apply(lambda x: <string logic> if pd.notna(x) else x)
-            - Never call string methods like .upper() or .split() directly on the Series without .str or .apply.
-            - Do not change number, percentage, or time formats unless explicitly instructed.
+            - Always convert to string before applying string operations:
+              df['col'] = df['col'].astype(str).apply(lambda x: <logic> if pd.notna(x) else x)
+            - Never call .upper(), .lower(), .split() directly on a Series — always use .str or .apply as above.
+            - Do not change numeric, percentage, or time formats unless explicitly instructed.
             - When parsing dates, always use:
               pd.to_datetime(df['col'].astype(str).str.strip(), errors='coerce')
-              (Do NOT hardcode a format unless explicitly given by the user)
-            - Avoid hardcoding sample values; generalize the solution.
-            - Return ONLY Python code that modifies `df` in place. No explanations.
-            - Do not include unnecessary indentation at the start of code lines unless required by Python syntax.
+            - Avoid hardcoding example values — make your logic general.
+            - Return ONLY Python code that modifies `df` in place, without explanations or markdown.
 
-            Here is the first 10 rows of data:
+            Here are the first 10 rows of the current data:
             {df.head(10).to_csv(index=False)}
 
             User instruction:
@@ -75,8 +79,6 @@ if uploaded_file is not None:
             )
 
             raw_code = response.choices[0].message.content
-
-            # --- Sanitize AI output ---
             raw_code = raw_code.replace("```python", "").replace("```", "").strip()
 
             # Keep only lines that look like Python code
@@ -89,38 +91,30 @@ if uploaded_file is not None:
                    re.match(r"^(df|pd|if|for|from|import|with)\b", stripped):
                     python_lines.append(line)
 
-            # Normalize indentation
             clean_code = textwrap.dedent("\n".join(python_lines)).strip()
 
-            # --- Auto-fix risky date parsing ---
+            # --- Auto-fixes ---
             clean_code = re.sub(
                 r"pd\.to_datetime\(([^,]+),\s*format=.*?\)",
                 r"pd.to_datetime(\1.astype(str).str.strip(), errors='coerce')",
                 clean_code
             )
-
-            # --- Auto-fix unsafe .upper() calls ---
             clean_code = re.sub(
                 r"df\['(\w+)'\]\.upper\(\)",
                 r"df['\1'].astype(str).str.upper()",
                 clean_code
             )
-
-            # --- Auto-fix unsafe .split(',')[0] calls ---
             clean_code = re.sub(
                 r"df\['(\w+)'\]\.split\('([^']+)'\)\[0\]",
                 r"df['\1'].astype(str).apply(lambda x: x.split('\2')[0] if pd.notna(x) and len(x.split('\2'))>0 else x)",
                 clean_code
             )
-
-            # --- Auto-fix unsafe .str.split(',')[0] calls ---
             clean_code = re.sub(
                 r"df\['(\w+)'\]\.str\.split\('([^']+)'\)\[0\]",
                 r"df['\1'].astype(str).apply(lambda x: x.split('\2')[0] if pd.notna(x) and len(x.split('\2'))>0 else x)",
                 clean_code
             )
 
-            # --- Auto-fix ANY .split(...)[n] calls ---
             def safe_split(match):
                 col = match.group(1)
                 sep = match.group(2)
@@ -132,27 +126,27 @@ if uploaded_file is not None:
                 safe_split,
                 clean_code
             )
-
             clean_code = re.sub(
                 r"df\['(\w+)'\]\.str\.split\('([^']+)'\)\[(\d+)\]",
                 safe_split,
                 clean_code
             )
 
-            # Show generated code for review
+            # Show generated code
             st.write("### Generated Code")
             st.code(clean_code, language="python")
 
-            # --- Pre-execution safeguard for AI code ---
+            # Execute on persistent df
             try:
                 exec(clean_code, {"df": df, "pd": pd, "pd_notna": pd.notna})
+                st.session_state.df = df
             except Exception as e:
                 st.error(f"Error executing AI code: {e}")
                 st.code(clean_code, language="python")
                 st.stop()
 
-            # Show cleaned data
-            st.write("### Cleaned Data")
+            # Show updated dataframe
+            st.write("### Updated Data")
             st.dataframe(df)
 
             # Download button
