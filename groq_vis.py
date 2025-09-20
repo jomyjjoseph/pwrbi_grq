@@ -73,7 +73,7 @@ if uploaded_file is not None:
 
             # Send request to Groq
             response = client.chat.completions.create(
-                model="llama3-8b-8192",
+                model="llama-3.1-8b-instant",
                 messages=[{"role": "user", "content": prompt_text}],
                 temperature=0
             )
@@ -186,3 +186,4 @@ if uploaded_file is not None:
 
         except Exception as e:
             st.error(f"Unexpected problem: {e}")
+
